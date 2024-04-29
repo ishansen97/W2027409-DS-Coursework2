@@ -1,0 +1,33 @@
+syntax = "proto3"; 
+option java_multiple_files = true; 
+package com.ds.coursework2.grpc.services.customer;
+
+message CheckItemAvailabilityRequest {
+    string itemName = 1;
+    int32 quantity = 2;
+}
+
+message CheckItemAvailabilityResponse {
+    string itemName = 1;
+    int32 quantity = 2;
+    bool itemExists = 3;
+    double orderPrice = 4;
+}
+
+message ReserveItemsRequest {
+    string itemName = 1;
+    int32 quantity = 2;
+    double orderPrice = 3;
+    string reserveDate = 4;
+    string cardNumber = 5;
+    bool sentByPrimary = 6;
+}
+
+message ReserveItemsResponse {
+    string successMessage = 1;
+}
+
+service CustomerService {
+    rpc CheckItemAvailability(CheckItemAvailabilityRequest) returns (CheckItemAvailabilityResponse);
+    rpc reserveItem(ReserveItemsRequest) returns (ReserveItemsResponse);
+}
