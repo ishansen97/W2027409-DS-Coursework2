@@ -25,6 +25,7 @@ public class Inventory {
     private byte[] leaderData;
     private ItemServiceImpl itemService;
     private CustomerServiceImpl customerService;
+    private OrderServiceImpl orderService;
     private DistributedTx transaction;
 
     private Map<String, Item> itemStore;
@@ -47,6 +48,7 @@ public class Inventory {
         this.serverPort = port;
         this.itemService = new ItemServiceImpl(this);
         this.customerService = new CustomerServiceImpl(this);
+        this.orderService = new OrderServiceImpl(this);
         this.itemStore = new HashMap<String, Item>();
         leaderLock = new DistributedLock("InventoryServerCluster", buildServerData(host, port));
         transaction = new DistributedTxParticipant(customerService);
@@ -57,6 +59,7 @@ public class Inventory {
                 .forPort(serverPort)
                 .addService(itemService)
                 .addService(customerService)
+                .addService(orderService)
                 .build();
         server.start();
         System.out.println("InventoryServer Started and ready to accept requests on port " + serverPort);

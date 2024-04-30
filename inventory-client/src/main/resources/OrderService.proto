@@ -1,0 +1,30 @@
+syntax = "proto3"; 
+option java_multiple_files = true; 
+package com.ds.coursework2.grpc.services.order;
+
+message ItemOrderRequest {
+    string itemName = 1;
+    int32 quantity = 2;
+}
+
+message CheckOrderAvailabilityRequest {
+    repeated ItemOrderRequest availabilityRequest = 1;
+}
+
+message CheckOrderAvailabilityResponse {
+    bool itemsExist = 1;
+    double orderPrice = 2;
+}
+
+message OrderItemsRequest {
+    string companyName = 1;
+}
+
+message OrderItemsResponse {
+    bool orderSuccess = 1;
+}
+
+service OrderService {
+    rpc checkOrderAvailability(CheckOrderAvailabilityRequest) returns(CheckOrderAvailabilityResponse);
+    rpc orderItems(OrderItemsRequest) returns(OrderItemsResponse);
+}
