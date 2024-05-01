@@ -13,19 +13,23 @@ message AddItemRequest {
     string itemName = 1;
     double price = 2;
     int32 quantity = 3;
+    bool sentByPrimary = 4;
 }
 
 message GetItemRequest {
     int32 itemId = 1;
+    bool sentByPrimary = 2;
 }
 
 message UpdateItemRequest {
     int32 itemId = 1;
     double newPrice = 2;
+    bool sentByPrimary = 3;
 }
 
 message DeleteItemRequest {
     int32 itemId = 1;
+    bool sentByPrimary = 2;
 }
 
 message AddItemResponse {
@@ -48,6 +52,7 @@ message DeleteItemResponse {
 }
 
 message ViewItemCatalogueRequest {
+    bool sentByPrimary = 1;
 }
 
 message ViewItemCatalogueResponse {

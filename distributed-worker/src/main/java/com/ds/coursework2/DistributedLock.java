@@ -60,12 +60,12 @@ public class DistributedLock implements Watcher {
     }
 
     private void createRootNode() throws InterruptedException, UnsupportedEncodingException, KeeperException {
-        lockPath = client.createNode(lockPath, false, CreateMode.PERSISTENT);
+        lockPath = client.createNode(lockPath, false, CreateMode.PERSISTENT, myDataBytes);
         System.out.println("Root node created at " + lockPath);
     }
 
     private void createChildNode() throws InterruptedException, UnsupportedEncodingException, KeeperException {
-        childPath = client.createNode(lockPath + lockProcessPath, false, CreateMode.EPHEMERAL_SEQUENTIAL);
+        childPath = client.createNode(lockPath + lockProcessPath, false, CreateMode.EPHEMERAL_SEQUENTIAL, myDataBytes);
         System.out.println("Child node created at " + childPath);
     }
 

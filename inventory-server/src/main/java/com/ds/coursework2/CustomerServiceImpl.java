@@ -28,11 +28,9 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
     private CustomerServiceBlockingStub clientStub;
     private String transactionItemName;
     private int transactionQuantity;
-    private DistributedTx transaction;
 
     public CustomerServiceImpl(Inventory inventory) {
         this.inventory = inventory;
-        this.transaction = inventory.getTransaction();
     }
 
     @Override
@@ -40,16 +38,23 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
             StreamObserver<CheckItemAvailabilityResponse> responseObserver) {
         String itemName = request.getItemName();
         int quantity = request.getQuantity();
-        Item item = inventory.getItem(itemName);
+
         CheckItemAvailabilityResponse response = null;
-        if (item != null) {
-            double finalPrice = item.getPrice() * quantity;
-            response = CheckItemAvailabilityResponse.newBuilder()
-                    .setItemName(itemName)
-                    .setQuantity(quantity)
-                    .setItemExists(true)
-                    .setOrderPrice(finalPrice)
-                    .build();
+        if (inventory.isLeader()) {
+            Item item = inventory.getItem(itemName);
+            if (item != null) {
+                double finalPrice = item.getPrice() * quantity;
+                response = CheckItemAvailabilityResponse.newBuilder()
+                        .setItemName(itemName)
+                        .setQuantity(quantity)
+                        .setItemExists(true)
+                        .setOrderPrice(finalPrice)
+                        .build();
+            }
+        } else {
+            // Act as secondary.
+            System.out.println("Redirecting item availability request to primary server.");
+            response = callPrimaryForItemAvailability(itemName, quantity);
         }
 
         responseObserver.onNext(response);
@@ -66,7 +71,6 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
 
         try {
             if (inventory.isLeader()) {
-                // Thread.sleep(2000);
                 System.out.println("Updating item catalogue as primary");
                 beginTransaction(itemName, quantity);
                 updateSecondaryServers(itemName, quantity);
@@ -89,10 +93,16 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
                 }
             }
         } catch (KeeperException kx) {
+            System.out.println("keeper exception: " + kx.getMessage());
+            resetTempData();
             message = "This transaction cannot be processed at the moment.";
         } catch (IOException ex1) {
+            System.out.println("IO exception: " + ex1.getMessage());
+            resetTempData();
             message = "This transaction cannot be processed at the moment.";
         } catch (Exception ex) {
+            System.out.println("exception: " + ex.getMessage());
+            resetTempData();
             message = "This transaction cannot be processed at the moment since one is already being processed.";
         }
 
@@ -104,6 +114,10 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
 
     private synchronized void modifyItemData() {
         inventory.decrementItemCount(transactionItemName, transactionQuantity);
+        resetTempData();
+    }
+
+    private void resetTempData() {
         transactionItemName = null;
         transactionQuantity = -1;
     }
@@ -120,16 +134,16 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
 
     @Override
     public void onGlobalCommit() {
-        DistributedLock itemLock;
-        try {
-            itemLock = new DistributedLock(transactionItemName);
-            itemLock.acquireLock();
-            Thread.sleep(5000);
-            modifyItemData();
-            itemLock.releaseLock();
-        } catch (IOException | KeeperException | InterruptedException e) {
-            System.out.println("something bad happened on global commit.");
-        }
+        modifyItemData();
+        // DistributedLock itemLock;
+        // try {
+        // itemLock = new DistributedLock(transactionItemName);
+        // itemLock.acquireLock();
+        // Thread.sleep(5000);
+        // itemLock.releaseLock();
+        // } catch (IOException | KeeperException | InterruptedException e) {
+        // System.out.println("something bad happened on global commit.");
+        // }
     }
 
     @Override
@@ -137,13 +151,13 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
         System.out.println("global abort to be implemented.");
     }
 
-    private void updateSecondaryServers(String accountId, int quantity) throws KeeperException, InterruptedException {
+    private void updateSecondaryServers(String itemName, int quantity) throws KeeperException, InterruptedException {
         System.out.println("Updating secondary servers");
         List<String[]> othersData = inventory.getOthersData();
         for (String[] data : othersData) {
             String IPAddress = data[0];
             int port = Integer.parseInt(data[1]);
-            callServer(accountId, quantity, true, IPAddress, port);
+            callServer(itemName, quantity, true, IPAddress, port);
         }
     }
 
@@ -159,9 +173,7 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
                 .newBuilder()
                 .setItemName(itemName)
                 .setQuantity(quantity)
-                // .setOrderPrice(response.getOrderPrice())
-                // .setReserveDate(reserveDate)
-                // .setCardNumber(cardNumber)
+                .setSentByPrimary(isSentByPrimary)
                 .build();
         ReserveItemsResponse response = clientStub.reserveItem(request);
         return response;
@@ -173,6 +185,32 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
         String IPAddress = currentLeaderData[0];
         int port = Integer.parseInt(currentLeaderData[1]);
         return callServer(itemName, quantity, false, IPAddress, port);
+    }
+
+    private CheckItemAvailabilityResponse callPrimaryForItemAvailability(String itemName, int quantity) {
+        System.out.println("Calling Primary server");
+        String[] currentLeaderData = inventory.getCurrentLeaderData();
+        String IPAddress = currentLeaderData[0];
+        int port = Integer.parseInt(currentLeaderData[1]);
+        return callServerForItemAvailability(itemName, quantity, false, IPAddress, port);
+    }
+
+    private CheckItemAvailabilityResponse callServerForItemAvailability(String itemName, int quantity,
+            boolean isSentByPrimary, String IPAddress,
+            int port) {
+        System.out.println("Call Server " + IPAddress + ":" + port);
+        channel = ManagedChannelBuilder.forAddress(IPAddress, port)
+                .usePlaintext()
+                .build();
+        clientStub = CustomerServiceGrpc.newBlockingStub(channel);
+
+        CheckItemAvailabilityRequest request = CheckItemAvailabilityRequest
+                .newBuilder()
+                .setItemName(itemName)
+                .setQuantity(quantity)
+                .build();
+        CheckItemAvailabilityResponse response = clientStub.checkItemAvailability(request);
+        return response;
     }
 
 }

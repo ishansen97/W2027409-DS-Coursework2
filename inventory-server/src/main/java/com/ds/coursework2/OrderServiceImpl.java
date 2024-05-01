@@ -26,34 +26,44 @@ public class OrderServiceImpl extends OrderServiceImplBase {
     @Override
     public void checkOrderAvailability(CheckOrderAvailabilityRequest request,
             StreamObserver<CheckOrderAvailabilityResponse> responseObserver) {
-        List<ItemOrderRequest> requestedItems = request.getAvailabilityRequestList();
-        boolean itemsExist = true;
-        double totalPrice = 0.0f;
-        for (ItemOrderRequest orderRequest : requestedItems) {
-            String itemName = orderRequest.getItemName();
-            Item item = inventory.getItem(itemName);
-            if (item == null) {
-                itemsExist = false;
-                // orderRequests = null;
-                break;
-            }
-            int quantity = orderRequest.getQuantity();
-            if ((item.getQuantity() - quantity) < 0) {
-                itemsExist = false;
-                // orderRequests = null;
-                break;
-            }
-            double itemAmount = item.getPrice() * quantity;
-            totalPrice += itemAmount;
-            // add to the Hashmap.
-            orderRequests.put(itemName, quantity);
-        }
 
-        // create the response.
-        CheckOrderAvailabilityResponse response = CheckOrderAvailabilityResponse.newBuilder()
-                .setItemsExist(itemsExist)
-                .setOrderPrice(totalPrice)
-                .build();
+        // only the server with leader lock accepts factory order requests.
+        CheckOrderAvailabilityResponse response = null;
+        if (inventory.isLeader()) {
+            List<ItemOrderRequest> requestedItems = request.getAvailabilityRequestList();
+            boolean itemsExist = true;
+            double totalPrice = 0.0f;
+            for (ItemOrderRequest orderRequest : requestedItems) {
+                String itemName = orderRequest.getItemName();
+                Item item = inventory.getItem(itemName);
+                if (item == null) {
+                    itemsExist = false;
+                    orderRequests = new HashMap<>();
+                    break;
+                }
+                int quantity = orderRequest.getQuantity();
+                if ((item.getQuantity() - quantity) < 0) {
+                    itemsExist = false;
+                    orderRequests = new HashMap<>();
+                    break;
+                }
+                double itemAmount = item.getPrice() * quantity;
+                totalPrice += itemAmount;
+                // add to the Hashmap.
+                orderRequests.put(itemName, quantity);
+            }
+
+            // create the response.
+            response = CheckOrderAvailabilityResponse.newBuilder()
+                    .setItemsExist(itemsExist)
+                    .setOrderPrice(totalPrice)
+                    .build();
+        } else {
+            System.out.println("Secondary servers will not accept factory orders.");
+            response = CheckOrderAvailabilityResponse.newBuilder()
+                    .setItemsExist(false)
+                    .build();
+        }
 
         responseObserver.onNext(response);
         responseObserver.onCompleted();
@@ -73,7 +83,10 @@ public class OrderServiceImpl extends OrderServiceImplBase {
                         .build();
             }
         } else {
-            // to be implemented.
+            System.out.println("Secondary servers will not accept factory orders.");
+            response = OrderItemsResponse.newBuilder()
+                    .setOrderSuccess(false)
+                    .build();
         }
 
         responseObserver.onNext(response);
