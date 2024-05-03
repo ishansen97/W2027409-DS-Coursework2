@@ -13,14 +13,20 @@ import java.util.stream.Collectors;
 
 import org.apache.zookeeper.KeeperException;
 
+import com.ds.coursework2.naming.NameServerClient;
+
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 
 public class Inventory {
+    public static final String NAME_SERVICE_ADDRESS = "http://localhost:2379";
+    public static final String ITEM_SERVICE = "ItemService";
+    public static final String CUSTOMER_SERVICE = "CustomerService";
+    public static final String ORDER_SERVICE = "OrderService";
     private DistributedLock leaderLock;
     private String host;
-    private int serverPort;
+    private int serverPort = 11436;
     private AtomicBoolean isLeader = new AtomicBoolean(false);
     private byte[] leaderData;
     private ItemServiceImpl itemService;
@@ -33,12 +39,14 @@ public class Inventory {
     public static void main(String[] args) throws Exception {
         DistributedLock.setZooKeeperURL("localhost:2181");
         DistributedTx.setZooKeeperURL("localhost:2181");
-        if (args.length != 1) {
-            System.out.println("Usage InventoryServer <port>");
-            System.exit(1);
-        }
-        int serverPort = Integer.parseInt(args[0].trim());
-        Inventory inventory = new Inventory("localhost", serverPort);
+
+        // if (args.length != 1) {
+        // System.out.println("Usage InventoryServer <port>");
+        // System.exit(1);
+        // }
+        // int serverPort = Integer.parseInt(args[0].trim());
+        int serverPort = 11436;
+        Inventory inventory = new Inventory("127.0.0.1", serverPort);
         inventory.startServer();
 
     }
@@ -55,17 +63,26 @@ public class Inventory {
     }
 
     public void startServer() throws IOException, InterruptedException, KeeperException {
-        Server server = ServerBuilder
-                .forPort(serverPort)
-                .addService(itemService)
-                .addService(customerService)
-                .addService(orderService)
-                .build();
-        server.start();
-        System.out.println("InventoryServer Started and ready to accept requests on port " + serverPort);
+        serverPort = ServerConnection.getServerPort();
+        if (serverPort != -1) {
+            Server server = ServerBuilder
+                    .forPort(serverPort)
+                    .addService(itemService)
+                    .addService(customerService)
+                    .addService(orderService)
+                    .build();
 
-        tryToBeLeader();
-        server.awaitTermination();
+            // adding the services to name server client
+            NameServerClient nameServerClient = new NameServerClient(NAME_SERVICE_ADDRESS);
+            nameServerClient.registerService(ITEM_SERVICE, host, serverPort, "tcp");
+            nameServerClient.registerService(CUSTOMER_SERVICE, host, serverPort, "tcp");
+            nameServerClient.registerService(ORDER_SERVICE, host, serverPort, "tcp");
+            server.start();
+            System.out.println("InventoryServer Started and ready to accept requests on port " + serverPort);
+
+            tryToBeLeader();
+            server.awaitTermination();
+        }
     }
 
     public static String buildServerData(String IP, int port) {

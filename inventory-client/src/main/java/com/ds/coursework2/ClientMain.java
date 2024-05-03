@@ -1,41 +1,32 @@
 package com.ds.coursework2;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 
-import com.ds.coursework2.grpc.services.AddItemRequest;
-import com.ds.coursework2.grpc.services.AddItemResponse;
-import com.ds.coursework2.grpc.services.customer.CheckItemAvailabilityRequest;
-import com.ds.coursework2.grpc.services.customer.CheckItemAvailabilityResponse;
-import com.ds.coursework2.grpc.services.DeleteItemRequest;
-import com.ds.coursework2.grpc.services.DeleteItemResponse;
-import com.ds.coursework2.grpc.services.GetItemRequest;
-import com.ds.coursework2.grpc.services.GetItemResponse;
-import com.ds.coursework2.grpc.services.ItemObject;
 import com.ds.coursework2.grpc.services.ItemServiceGrpc;
-import com.ds.coursework2.grpc.services.UpdateItemRequest;
-import com.ds.coursework2.grpc.services.UpdateItemResponse;
-import com.ds.coursework2.grpc.services.ViewItemCatalogueResponse;
 import com.ds.coursework2.grpc.services.customer.CustomerServiceGrpc;
-import com.ds.coursework2.grpc.services.customer.ReserveItemsRequest;
-import com.ds.coursework2.grpc.services.customer.ReserveItemsResponse;
-import com.ds.coursework2.grpc.services.order.CheckOrderAvailabilityRequest;
-import com.ds.coursework2.grpc.services.order.CheckOrderAvailabilityResponse;
-import com.ds.coursework2.grpc.services.order.ItemOrderRequest;
-import com.ds.coursework2.grpc.services.order.OrderItemsRequest;
-import com.ds.coursework2.grpc.services.order.OrderItemsResponse;
 import com.ds.coursework2.grpc.services.order.OrderServiceGrpc;
+import com.ds.coursework2.naming.NameServerClient;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 
 public class ClientMain {
+    public static final String NAME_SERVICE_ADDRESS = "http://localhost:2379";
+    public static final String ITEM_SERVICE = "ItemService";
+    public static final String CUSTOMER_SERVICE = "CustomerService";
+    public static final String ORDER_SERVICE = "OrderService";
     private static final String CUSTOMER = "customer";
     private static final String SELLER = "seller";
     private static final String FACTORY = "factory";
+
+    private static final String PRIMARY = "primary";
+    private static final String SECONDARY = "secondary";
+    private static final String TERTIARY = "tertiary";
+
     private ManagedChannel channel = null;
     private ItemServiceGrpc.ItemServiceBlockingStub clientStub;
     private CustomerServiceGrpc.CustomerServiceBlockingStub customerStub;
@@ -44,20 +35,23 @@ public class ClientMain {
     private Scanner scanner = new Scanner(System.in);
     int port = -1;
     String clientType;
+    String serverType;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException, IOException {
         String host = null;
         int port = -1;
-        String clientType;
-        if (args.length != 3) {
-            System.out.println("Usage Client Main <host> <port>");
+        String clientType, serverType;
+        if (args.length != 2) {
+            System.out.println("Usage Client Main <serverType> <clientType>");
             System.exit(1);
         }
-        host = args[0];
-        port = Integer.parseInt(args[1].trim());
-        clientType = args[2].trim();
+        // host = args[0];
+        // port = Integer.parseInt(args[1].trim());
+        serverType = args[0].trim();
+        clientType = args[1].trim();
 
-        ClientMain client = new ClientMain(host, port, clientType);
+        // ClientMain client = new ClientMain(host, port, clientType);
+        ClientMain client = new ClientMain(clientType, serverType);
         client.initializeConnection();
         client.displayMenu(clientType);
         client.closeConnection();
@@ -67,6 +61,33 @@ public class ClientMain {
         this.host = host;
         this.port = port;
         this.clientType = mode;
+    }
+
+    public ClientMain(String clientType, String serverType) throws InterruptedException, IOException {
+        this.clientType = clientType;
+        this.serverType = serverType;
+        fetchConnectionDetails();
+    }
+
+    private void fetchConnectionDetails() throws InterruptedException, IOException {
+        NameServerClient client = new NameServerClient(NAME_SERVICE_ADDRESS);
+        NameServerClient.ServiceDetails serviceDetails = client.findService(ITEM_SERVICE);
+        host = serviceDetails.getIPAddress();
+        port = serviceDetails.getPort();
+        System.out.println("Host: " + host + ", port: " + port);
+    }
+
+    private String getServiceName() {
+        switch (this.clientType) {
+            case SELLER:
+                return ITEM_SERVICE;
+            case CUSTOMER:
+                return CUSTOMER_SERVICE;
+            case FACTORY:
+                return ORDER_SERVICE;
+            default:
+                return null;
+        }
     }
 
     private void initializeConnection() {

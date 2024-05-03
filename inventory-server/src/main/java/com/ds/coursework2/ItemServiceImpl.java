@@ -49,11 +49,7 @@ public class ItemServiceImpl extends ItemServiceImplBase {
                 System.out.println("Quantity: " + quantity);
                 int newId = inventory.getAddedItemId() + 1;
                 Item item = new Item(newId, itemName, request.getPrice(), request.getQuantity());
-                try {
-                    inventory.addItem(itemName, item);
-                } catch (KeeperException | InterruptedException e) {
-                    e.printStackTrace();
-                }
+                inventory.addItem(itemName, item);
 
                 response = AddItemResponse
                         .newBuilder()
@@ -64,9 +60,14 @@ public class ItemServiceImpl extends ItemServiceImplBase {
             } else {
                 // Act as secondary
                 if (request.getSentByPrimary()) {
-                    System.out.println("Printing the message sent by the primary server.");
+                    System.out.println("Updating the local copy after the primary server.");
                     System.out.println("The new item \'" + request.getItemName()
                             + "\' has been added to the system by the primary server.");
+
+                    int newId = inventory.getAddedItemId() + 1;
+                    Item item = new Item(newId, itemName, request.getPrice(), request.getQuantity());
+                    inventory.addItem(itemName, item);
+
                 } else {
                     response = callPrimaryOnAddition(itemName, price, quantity);
                 }
@@ -84,24 +85,14 @@ public class ItemServiceImpl extends ItemServiceImplBase {
         int itemId = request.getItemId();
         GetItemResponse response = null;
 
-        try {
-            if (inventory.isLeader()) {
-                Item item = inventory.getItem(itemId);
-                if (item != null) {
-                    response = GetItemResponse.newBuilder()
-                            .setItemId(itemId)
-                            .setItemName(item.getItemName())
-                            .setPrice(item.getPrice())
-                            .setQuantity(item.getQuantity())
-                            .build();
-                }
-            } else {
-                // Act as secondary
-                System.out.println("Redirecting the item retrieval request to primary.");
-                response = callPrimaryForRetrieval(itemId);
-            }
-        } catch (Exception ex) {
-            System.out.println("something went wrong when retrieving the Item.");
+        Item item = inventory.getItem(itemId);
+        if (item != null) {
+            response = GetItemResponse.newBuilder()
+                    .setItemId(itemId)
+                    .setItemName(item.getItemName())
+                    .setPrice(item.getPrice())
+                    .setQuantity(item.getQuantity())
+                    .build();
         }
 
         responseObserver.onNext(response);
@@ -124,8 +115,9 @@ public class ItemServiceImpl extends ItemServiceImplBase {
             } else {
                 // Act as secondary
                 if (request.getSentByPrimary()) {
-                    System.out.println("Printing message sent by primary server.");
+                    System.out.println("Updating the item based on local copy based on primary server.");
                     System.out.println("The item ID " + itemId + " has been updated.");
+                    inventory.updateItem(itemId, newPrice);
                 } else {
                     response = callPrimaryOnUpdation(itemId, newPrice);
                 }
@@ -154,8 +146,9 @@ public class ItemServiceImpl extends ItemServiceImplBase {
             } else {
                 // Act as secondary.
                 if (request.getSentByPrimary()) {
-                    System.out.println("Printing this message on primary server command.");
+                    System.out.println("Deleting the item from the local copy based on primary server command.");
                     System.out.println("The Item ID " + itemId + " has been deleted from the system.");
+                    inventory.deleteItem(itemId);
                 } else {
                     response = callPrimaryOnDeletion(itemId);
                 }
@@ -173,21 +166,12 @@ public class ItemServiceImpl extends ItemServiceImplBase {
             StreamObserver<ViewItemCatalogueResponse> responseObserver) {
 
         ViewItemCatalogueResponse response = null;
-        try {
-            if (inventory.isLeader()) {
-                List<Item> items = inventory.getAllItems();
-                Iterable<ItemObject> itemResponse = items.stream().map((item) -> populateItemObject(item))
-                        .collect(Collectors.toList());
-                response = ViewItemCatalogueResponse.newBuilder()
-                        .addAllItemCatalogue(itemResponse)
-                        .build();
-            } else {
-                // Act as secondary
-                response = callPrimaryForItemCatalogue();
-            }
-        } catch (Exception ex) {
-            System.err.println("Something went wrong in displaying item catalogue.");
-        }
+        List<Item> items = inventory.getAllItems();
+        Iterable<ItemObject> itemResponse = items.stream().map((item) -> populateItemObject(item))
+                .collect(Collectors.toList());
+        response = ViewItemCatalogueResponse.newBuilder()
+                .addAllItemCatalogue(itemResponse)
+                .build();
 
         responseObserver.onNext(response);
         responseObserver.onCompleted();
