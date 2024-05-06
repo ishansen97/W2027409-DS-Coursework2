@@ -66,20 +66,21 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
     public void reserveItem(ReserveItemsRequest request, StreamObserver<ReserveItemsResponse> responseObserver) {
         String itemName = request.getItemName();
         int quantity = request.getQuantity();
+        String date = request.getReserveDate();
         ReserveItemsResponse response = null;
         String message = "Your transaction is successful.";
 
         try {
             if (inventory.isLeader()) {
                 System.out.println("Updating item catalogue as primary");
-                beginTransaction(itemName, quantity);
+                beginTransaction(itemName, quantity, date);
                 updateSecondaryServers(itemName, quantity);
                 ((DistributedTxCoordinator) inventory.getTransaction()).perform();
             } else {
                 // Act As Secondary
                 if (request.getSentByPrimary()) {
                     System.out.println("Updating item catalogue on secondary, on Primary's command");
-                    beginTransaction(itemName, quantity);
+                    beginTransaction(itemName, quantity, date);
                     if (quantity > 0) {
                         ((DistributedTxParticipant) inventory.getTransaction()).voteCommit();
                     } else {
@@ -122,28 +123,25 @@ public class CustomerServiceImpl extends CustomerServiceImplBase implements Dist
         transactionQuantity = -1;
     }
 
-    private void beginTransaction(String itemName, int quantity) throws Exception {
+    private void beginTransaction(String itemName, int quantity, String date) throws Exception {
         String uuId = String.valueOf(UUID.randomUUID());
         System.out.println("UUID for the transaction: " + uuId);
         transactionItemName = itemName;
         transactionQuantity = quantity;
         System.out.println(
-                "transaction name: " + transactionItemName + ", transaction quantity: " + transactionQuantity);
-        inventory.getTransaction().start(itemName, uuId);
+                "Item name: " + transactionItemName + ", transaction quantity: " + transactionQuantity);
+        String transactionLockName = itemName + date;
+        inventory.getTransaction().start(transactionLockName, uuId);
     }
 
     @Override
     public void onGlobalCommit() {
-        modifyItemData();
-        // DistributedLock itemLock;
-        // try {
-        // itemLock = new DistributedLock(transactionItemName);
-        // itemLock.acquireLock();
-        // Thread.sleep(5000);
-        // itemLock.releaseLock();
-        // } catch (IOException | KeeperException | InterruptedException e) {
-        // System.out.println("something bad happened on global commit.");
-        // }
+        try {
+            modifyItemData();
+            Thread.sleep(5000);
+        } catch (Exception ex) {
+            System.out.println("something bad happened on global commit.");
+        }
     }
 
     @Override

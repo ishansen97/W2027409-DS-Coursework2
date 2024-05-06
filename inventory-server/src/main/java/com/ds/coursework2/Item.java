@@ -6,6 +6,9 @@ public class Item {
     private double price;
     private int quantity;
 
+    public Item() {
+    }
+
     public Item(int itemId, String itemName, double price, int quantity) {
         this.itemId = itemId;
         this.itemName = itemName;

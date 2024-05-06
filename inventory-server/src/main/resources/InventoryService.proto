@@ -59,10 +59,17 @@ message ViewItemCatalogueResponse {
     repeated ItemObject itemCatalogue = 1;
 }
 
+message GetPrimaryNodeDataRequest {}
+
+message GetPrimaryNodeDataResponse {
+    map<string, ItemObject> data = 1;
+}
+
 service ItemService {
     rpc addItem(AddItemRequest) returns (AddItemResponse);
     rpc getItem(GetItemRequest) returns (GetItemResponse);
     rpc updateItem(UpdateItemRequest) returns (UpdateItemResponse);
     rpc deleteItem(DeleteItemRequest) returns (DeleteItemResponse);
     rpc getItemCatalogue(ViewItemCatalogueRequest) returns (ViewItemCatalogueResponse);
+    rpc getPrimaryNodeData(GetPrimaryNodeDataRequest) returns (GetPrimaryNodeDataResponse);
 }

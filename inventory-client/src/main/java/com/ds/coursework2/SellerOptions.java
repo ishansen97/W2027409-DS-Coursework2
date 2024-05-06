@@ -42,7 +42,7 @@ public class SellerOptions {
         AddItemResponse itemResponse = clientStub.addItem(addItemRequest);
         int itemId = itemResponse.getItemId();
 
-        System.out.printf("The Item with ID {} has been added to the inventory.\n", itemId);
+        System.out.println("The Item with ID " + itemId + " has been added to the inventory.\n");
     }
 
     public static void getItem() {

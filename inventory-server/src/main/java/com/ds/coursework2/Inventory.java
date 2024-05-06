@@ -45,8 +45,8 @@ public class Inventory {
         // System.exit(1);
         // }
         // int serverPort = Integer.parseInt(args[0].trim());
-        int serverPort = 11436;
-        Inventory inventory = new Inventory("127.0.0.1", serverPort);
+        int serverPort = ServerConnection.getServerPort();
+        Inventory inventory = new Inventory("localhost", serverPort);
         inventory.startServer();
 
     }
@@ -58,12 +58,11 @@ public class Inventory {
         this.customerService = new CustomerServiceImpl(this);
         this.orderService = new OrderServiceImpl(this);
         this.itemStore = new HashMap<String, Item>();
-        leaderLock = new DistributedLock("InventoryServerCluster", buildServerData(host, port));
+        leaderLock = new DistributedLock("InventoryServerCluster", buildServerData(host, serverPort));
         transaction = new DistributedTxParticipant(customerService);
     }
 
     public void startServer() throws IOException, InterruptedException, KeeperException {
-        serverPort = ServerConnection.getServerPort();
         if (serverPort != -1) {
             Server server = ServerBuilder
                     .forPort(serverPort)
@@ -74,13 +73,13 @@ public class Inventory {
 
             // adding the services to name server client
             NameServerClient nameServerClient = new NameServerClient(NAME_SERVICE_ADDRESS);
-            nameServerClient.registerService(ITEM_SERVICE, host, serverPort, "tcp");
-            nameServerClient.registerService(CUSTOMER_SERVICE, host, serverPort, "tcp");
-            nameServerClient.registerService(ORDER_SERVICE, host, serverPort, "tcp");
+            nameServerClient.registerServer("localhost:" + serverPort,
+                    new String[] { ITEM_SERVICE, CUSTOMER_SERVICE, ORDER_SERVICE });
             server.start();
             System.out.println("InventoryServer Started and ready to accept requests on port " + serverPort);
 
             tryToBeLeader();
+            populatePrimaryInventoryData();
             server.awaitTermination();
         }
     }
@@ -94,6 +93,16 @@ public class Inventory {
     private void tryToBeLeader() throws KeeperException, InterruptedException {
         Thread leaderCampaignThread = new Thread(new LeaderCampaignThread());
         leaderCampaignThread.start();
+    }
+
+    private void populatePrimaryInventoryData() throws KeeperException, InterruptedException {
+        byte[] data = leaderLock.getLockHolderData();
+        if (data != null) {
+            String[] dataItems = new String(data).split(":");
+            String primaryHost = dataItems[0];
+            int primaryPort = Integer.parseInt(dataItems[1]);
+            itemStore = this.itemService.getPrimaryNodeData(primaryHost, primaryPort);
+        }
     }
 
     public synchronized void addItem(String itemName, Item item) throws KeeperException, InterruptedException {
@@ -162,6 +171,8 @@ public class Inventory {
     }
 
     public synchronized String[] getCurrentLeaderData() {
+        if (leaderData == null)
+            return null;
         return new String(leaderData).split(":");
     }
 

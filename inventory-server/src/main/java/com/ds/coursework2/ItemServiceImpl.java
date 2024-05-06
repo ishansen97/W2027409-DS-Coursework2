@@ -1,7 +1,12 @@
 package com.ds.coursework2;
 
+import static io.grpc.MethodDescriptor.extractBareMethodName;
+
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
 import java.util.stream.Collectors;
 
@@ -13,6 +18,8 @@ import com.ds.coursework2.grpc.services.DeleteItemRequest;
 import com.ds.coursework2.grpc.services.DeleteItemResponse;
 import com.ds.coursework2.grpc.services.GetItemRequest;
 import com.ds.coursework2.grpc.services.GetItemResponse;
+import com.ds.coursework2.grpc.services.GetPrimaryNodeDataRequest;
+import com.ds.coursework2.grpc.services.GetPrimaryNodeDataResponse;
 import com.ds.coursework2.grpc.services.ItemObject;
 import com.ds.coursework2.grpc.services.ItemServiceGrpc;
 import com.ds.coursework2.grpc.services.UpdateItemRequest;
@@ -177,6 +184,27 @@ public class ItemServiceImpl extends ItemServiceImplBase {
         responseObserver.onCompleted();
     }
 
+    @Override
+    public void getPrimaryNodeData(GetPrimaryNodeDataRequest request,
+            StreamObserver<GetPrimaryNodeDataResponse> responseObserver) {
+        GetPrimaryNodeDataResponse response = null;
+        if (inventory.isLeader()) {
+            Map<String, ItemObject> inventoryStore = new HashMap<>();
+            List<Item> items = inventory.getAllItems();
+            Iterable<ItemObject> itemResponse = items.stream().map((item) -> populateItemObject(item))
+                    .collect(Collectors.toList());
+
+            for (ItemObject itemObject : itemResponse) {
+                inventoryStore.put(itemObject.getItemName(), itemObject);
+            }
+
+            response = GetPrimaryNodeDataResponse.newBuilder().putAllData(inventoryStore).build();
+        }
+
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
+
     // util methods
     private ItemObject populateItemObject(Item item) {
         ItemObject obj = ItemObject.newBuilder()
@@ -187,6 +215,36 @@ public class ItemServiceImpl extends ItemServiceImplBase {
                 .build();
 
         return obj;
+    }
+
+    public Map<String, Item> getPrimaryNodeData(String IPAddress, int port) {
+        Map<String, Item> primaryInventory = new HashMap<>();
+        channel = ManagedChannelBuilder.forAddress(IPAddress, port)
+                .usePlaintext()
+                .build();
+        clientStub = ItemServiceGrpc.newBlockingStub(channel);
+
+        System.out.println("Trying to request primary server data from adddress " + IPAddress + ", port: " + port);
+        GetPrimaryNodeDataRequest request = GetPrimaryNodeDataRequest.newBuilder().build();
+
+        GetPrimaryNodeDataResponse response = clientStub.getPrimaryNodeData(request);
+
+        // do some mapping.
+        Map<String, ItemObject> responseData = response.getDataMap();
+        for (Entry<String, ItemObject> entries : responseData.entrySet()) {
+            ItemObject entryValue = entries.getValue();
+            Item item = new Item();
+            item.setItemId(entryValue.getItemId());
+            item.setItemName(entryValue.getItemName());
+            item.setQuantity(entryValue.getQuantity());
+            item.setPrice(entryValue.getPrice());
+
+            primaryInventory.put(entries.getKey(), item);
+        }
+
+        System.out.println("data gathered.");
+
+        return primaryInventory;
     }
 
     // addition
@@ -225,26 +283,6 @@ public class ItemServiceImpl extends ItemServiceImplBase {
                 .setSentByPrimary(isSentByPrimary)
                 .build();
         AddItemResponse response = clientStub.addItem(request);
-        return response;
-    }
-
-    private GetItemResponse callPrimaryForRetrieval(int itemId) {
-        String[] currentLeaderData = inventory.getCurrentLeaderData();
-        String IPAddress = currentLeaderData[0];
-        int port = Integer.parseInt(currentLeaderData[1]);
-
-        System.out.println("Call Server " + IPAddress + ":" + port);
-        channel = ManagedChannelBuilder.forAddress(IPAddress, port)
-                .usePlaintext()
-                .build();
-        clientStub = ItemServiceGrpc.newBlockingStub(channel);
-
-        GetItemRequest request = GetItemRequest
-                .newBuilder()
-                .setItemId(itemId)
-                .setSentByPrimary(false)
-                .build();
-        GetItemResponse response = clientStub.getItem(request);
         return response;
     }
 
@@ -317,25 +355,4 @@ public class ItemServiceImpl extends ItemServiceImplBase {
         DeleteItemResponse response = clientStub.deleteItem(request);
         return response;
     }
-
-    // view catalogue
-    private ViewItemCatalogueResponse callPrimaryForItemCatalogue() {
-        String[] currentLeaderData = inventory.getCurrentLeaderData();
-        String IPAddress = currentLeaderData[0];
-        int port = Integer.parseInt(currentLeaderData[1]);
-
-        System.out.println("Call Server " + IPAddress + ":" + port);
-        channel = ManagedChannelBuilder.forAddress(IPAddress, port)
-                .usePlaintext()
-                .build();
-        clientStub = ItemServiceGrpc.newBlockingStub(channel);
-
-        ViewItemCatalogueRequest request = ViewItemCatalogueRequest
-                .newBuilder()
-                .setSentByPrimary(false)
-                .build();
-        ViewItemCatalogueResponse response = clientStub.getItemCatalogue(request);
-        return response;
-    }
-
 }

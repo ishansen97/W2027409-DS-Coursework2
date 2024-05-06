@@ -71,10 +71,12 @@ public class ClientMain {
 
     private void fetchConnectionDetails() throws InterruptedException, IOException {
         NameServerClient client = new NameServerClient(NAME_SERVICE_ADDRESS);
-        NameServerClient.ServiceDetails serviceDetails = client.findService(ITEM_SERVICE);
-        host = serviceDetails.getIPAddress();
-        port = serviceDetails.getPort();
-        System.out.println("Host: " + host + ", port: " + port);
+        String serviceName = getServiceName();
+        port = getServerPort();
+        NameServerClient.ServiceDetails serverDetails = client.findServer("localhost:" + port);
+        // host = serviceDetails.getIPAddress();
+        // port = serviceDetails.getPort();
+        System.out.println("Host: localhost" + host + ", port: " + port);
     }
 
     private String getServiceName() {
@@ -88,6 +90,20 @@ public class ClientMain {
             default:
                 return null;
         }
+    }
+
+    private int getServerPort() {
+        switch (this.serverType) {
+            case PRIMARY:
+                return 11436;
+            case SECONDARY:
+                return 11437;
+            case TERTIARY:
+                return 11438;
+            default:
+                break;
+        }
+        return -1;
     }
 
     private void initializeConnection() {
